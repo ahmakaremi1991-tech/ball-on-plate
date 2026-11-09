@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ball on Plate Playground</title>
+<style>
+/* Lab-bench instrument: the 3-D rig is the page, the panel beside it is the control desk.
+   One light theme by choice, so the drawing and the charts stay the same everywhere. */
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --panel: #f1f2f1;
+  --line: #d3d4cd;
+  --ink: #0b0b0b;
+  --ink2: #52514e;
+  --muted: #6f6e68;
+  --accent: #2a78d6;
+  --critical: #b92f2f;
+  --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono: Consolas, "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--surface); color: var(--ink); font: 14px/1.45 var(--font); }
+button, input, select { font: inherit; color: var(--ink); }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; padding: 12px 16px 8px; }
+h1 { margin: 0; font-size: 20px; font-weight: 600; text-wrap: balance; }
+header p { margin: 0; color: var(--ink2); }
+.desk { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(380px, 1fr); gap: 16px; padding: 0 16px 16px; align-items: start; }
+.stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.view { position: relative; height: min(66vh, 640px); min-height: 360px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.view canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.view canvas:active { cursor: grabbing; }
+#readout { position: absolute; left: 12px; top: 8px; right: 12px; pointer-events: none; font-variant-numeric: tabular-nums; }
+#readout b { font-weight: 600; }
+#hint3d { position: absolute; right: 12px; bottom: 8px; color: var(--muted); font-size: 12px; pointer-events: none; }
+#lost { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); display: none; width: max-content; max-width: calc(100% - 32px);
+  padding: 10px 16px; background: var(--critical); color: #fff; border-radius: 6px; text-align: center; font-size: 15px; }
+#lost b { display: block; font-size: 20px; letter-spacing: .02em; }
+.play { display: grid; grid-template-columns: auto 1fr auto auto auto auto; gap: 8px; align-items: center; }
+.panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mapRow { display: grid; grid-template-columns: minmax(180px, 250px) 1fr; gap: 12px; align-items: start; }
+#map { width: 100%; aspect-ratio: 1; display: block; border: 1px solid var(--line); border-radius: 6px; cursor: crosshair; background: var(--surface); touch-action: none; }
+.mapSide { display: flex; flex-direction: column; gap: 8px; }
+.mapSide p { margin: 0; color: var(--ink2); font-size: 13px; }
+fieldset { margin: 0; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); min-width: 0; }
+legend { padding: 0 4px; font-weight: 600; font-size: 13px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+label.f { display: flex; flex-direction: column; justify-content: space-between; gap: 2px; font-size: 12px; color: var(--ink2); }
+input[type=number], select { width: 100%; padding: 4px 6px; border: 1px solid #a9aaa3; border-radius: 4px; background: #fff; font-variant-numeric: tabular-nums; }
+input:disabled, select:disabled { color: var(--muted); background: #e7e8e5; }
+button { padding: 5px 12px; border: 1px solid #a9aaa3; border-radius: 4px; background: #fff; cursor: pointer; }
+button:hover:not(:disabled) { background: #eef1f5; }
+button:disabled { color: var(--muted); cursor: default; background: #e7e8e5; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding: 8px 16px; }
+button.primary:hover:not(:disabled) { background: #1f62b5; }
+button.on { background: #dfe9f6; border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.go { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+label.c { display: flex; align-items: center; gap: 6px; }
+#status { margin: 0; min-height: 20px; color: var(--ink2); }
+.logHead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.logHead h2 { margin: 0; font-size: 13px; font-weight: 600; }
+#log { max-height: 196px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; font: 12.5px/1.4 var(--mono); background: #fff; }
+#log div.e { padding: 4px 8px; border-bottom: 1px solid #e8e9e4; overflow-wrap: anywhere; }
+#log div.e:last-child { border-bottom: 0; }
+#log div.e span { display: block; color: var(--ink2); }
+#log .pill { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 3px; background: var(--critical); color: #fff; font-weight: 600; }
+section { padding: 0 16px 16px; }
+section h2 { margin: 8px 0; font-size: 16px; font-weight: 600; }
+#charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+.chart { position: relative; }
+.chart h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.chart canvas { display: block; width: 100%; height: 170px; cursor: crosshair; }
+.chart .lg { display: flex; flex-wrap: wrap; gap: 2px 12px; min-height: 18px; font-size: 12px; color: var(--ink2); }
+.chart .lg i { display: inline-block; width: 16px; height: 0; margin-right: 4px; border-top: 2px solid; vertical-align: middle; }
+#tip { position: fixed; display: none; z-index: 5; padding: 4px 8px; background: var(--ink); color: #fff; border-radius: 4px; font-size: 12px; pointer-events: none; font-variant-numeric: tabular-nums; white-space: pre; }
+details { margin-top: 8px; }
+summary { cursor: pointer; color: var(--ink2); }
+.tw { overflow-x: auto; max-height: 280px; margin-top: 6px; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+th, td { padding: 2px 8px; text-align: right; border-bottom: 1px solid #e8e9e4; white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--panel); font-weight: 600; }
+.about { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 32px; }
+.about h3 { margin: 8px 0 2px; font-size: 14px; font-weight: 600; }
+.about p, .about ul { margin: 0 0 6px; max-width: 65ch; }
+.about ul { padding-left: 18px; }
+@media (max-width: 900px) {
+  .desk { grid-template-columns: minmax(0, 1fr); }
+  .view { height: 58vh; }
+  .play { grid-template-columns: auto 1fr; }
+}
+@media (max-width: 460px) { .mapRow { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ball on Plate Playground</h1>
+  <p>Two servos tilt a 300 mm plate, a 30 fps webcam watches the ball, and a controller keeps it on target.</p>
+</header>
+<div class="desk">
+  <div class="stage">
+    <div class="view" id="view">
+      <canvas id="rig" aria-label="3-D view of the rig: plate, servos, camera and ball"></canvas>
+      <div id="readout" role="status"></div>
+      <div id="lost" role="alert"></div>
+      <div id="hint3d">Drag to rotate, scroll to zoom</div>
+    </div>
+    <div class="play">
+      <button id="playBtn" type="button">Play</button>
+      <input id="slider" type="range" min="0" max="1" value="0" step="1" aria-label="Time">
+      <span id="timeLbl" style="font-variant-numeric:tabular-nums">0.00 s</span>
+      <label class="c">speed
+        <select id="pb"><option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option></select></label>
+      <label class="c">show <select id="run"></select></label>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="mapRow">
+      <canvas id="map" aria-label="Top view of the plate. Click to set the start point."></canvas>
+      <div class="mapSide">
+        <p id="mapHint">Click the map to set where the ball starts. Dotted square: the ball is lost past it.</p>
+        <div class="go">
+          <button id="draw" type="button">Draw path</button>
+          <button id="clear" type="button">Clear path</button>
+        </div>
+      </div>
+    </div>
+    <fieldset><legend>Start of the ball</legend><div class="fields">
+      <label class="f">x [mm]<input id="x" type="number" step="5"></label>
+      <label class="f">y [mm]<input id="y" type="number" step="5"></label>
+      <label class="f">drop height [mm]<input id="h" type="number" min="0" max="300" step="10"></label>
+      <label class="f">sideways speed [mm/s]<input id="speed" type="number" min="0" max="1000" step="50"></label>
+      <label class="f">direction [deg]<input id="dir" type="number" step="15"></label>
+      <label class="f">ball<select id="ball"><option value="solid">solid</option><option value="hollow">hollow</option></select></label>
+    </div></fieldset>
+    <fieldset><legend>Task</legend><div class="fields">
+      <label class="f" style="grid-column: span 2">task<select id="task">
+        <option value="centre">Go to centre</option><option value="zigzag">Zig-zag</option><option value="circle">Circle</option>
+        <option value="square">Square</option><option value="figure8">Figure-8</option><option value="line">Line</option><option value="custom">My path</option></select></label>
+      <label class="f">path speed [mm/s]<input id="pathSpeed" type="number" min="20" max="300" step="10"></label>
+      <label class="f">path size [mm]<input id="size" type="number" min="20" step="5"></label>
+    </div></fieldset>
+    <div class="go">
+      <label class="c">controller <select id="ctrl"><option value="0">PID*</option><option value="1">LQR*</option><option value="2">MPC*</option></select></label>
+      <label class="c"><input id="compare" type="checkbox"> compare all 3</label>
+      <button id="sim" class="primary" type="button">Simulate</button>
+    </div>
+    <p id="status" role="status"></p>
+    <div class="logHead"><h2>Results, newest first: change one thing and compare</h2><button id="logClear" type="button">Clear list</button></div>
+    <div id="log"></div>
+  </div>
+</div>
+<section>
+  <h2>Plots of the run shown</h2>
+  <div id="charts"></div>
+  <details><summary>Show the numbers as a table (every 0.25 s)</summary><div class="tw"><table id="table"></table></div></details>
+</section>
+<section>
+  <h2>About this simulation</h2>
+  <div class="about">
+    <div>
+      <h3>What you are looking at</h3>
+      <p>A plate tilted by two hobby servos must bring a rolling ball to a target, using only a webcam (30 frames per second, 90 ms late). The model includes servo speed limit, deadband and backlash, camera noise and lost frames, and the ball's flight and bounce.</p>
+      <h3>The controllers</h3>
+      <ul>
+        <li><b>PID*</b>: classic feedback on the camera position.</li>
+        <li><b>LQR*</b>: optimal state feedback with a Kalman filter that predicts through the delay.</li>
+        <li><b>MPC*</b>: the same filter, but it re-plans 1.2 s ahead every frame and knows the tilt and servo limits.</li>
+      </ul>
+      <p>The star means robust-tuned on perturbed rigs. They were tuned for the solid ball starting on the plate and going to a fixed point, so drops, hollow balls and paths are new to them.</p>
+    </div>
+    <div>
+      <h3>Things to try</h3>
+      <ul>
+        <li>Same start, drop height 50 mm, then 250 mm.</li>
+        <li>Height 150 mm, solid, then hollow: the hollow ball keeps bouncing far longer, and it cannot be steered in the air.</li>
+        <li>Near an edge, throw it outwards: does it stay on the plate?</li>
+        <li>Zig-zag at 100 mm/s, then 250 mm/s, with each controller. At 250 mm/s LQR* and MPC* chase the target so hard that they overshoot off the plate, and the run ends there.</li>
+        <li>Press Draw path, click some points, then Simulate.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>How far to trust it</h3>
+      <p>This page is a JavaScript copy of a MATLAB/Simulink model. It was compared with Simulink on 45 reference runs without camera noise: ball position differs by at most 0.4 mm (RMS), and bounce counts and the time the ball is lost are the same. With camera noise, mean settling time over the 8 standard starts differs by at most 1.3 %. The MPC solver matches MATLAB's at 60 test states.</p>
+      <p>It is a simulation, not a measured rig. The ball's bounciness (0.6 solid, 0.85 hollow) and its sliding friction during a bounce (0.4) are assumed values. A rolling ball never lifts off the plate, and the camera has no parallax for a ball in the air.</p>
+    </div>
+  </div>
+</section>
+<div id="tip"></div>
+<script>
+const GAINS = {"names":["PID*","LQR*","MPC*"],"pid":{"P":0.7402341711112642,"I":0.8307086553475193,"D":0.445746591782884,"N":54.14943317623765,"b":1,"c":0,"Izone":0.02820454145233977,"Ts":0.03333333333333333},"lqr":{"Phi":[[1,0.033305570981226426,0.003654702250198922,2.8989613583778695e-05,0.003890695345268493],[0,0.9983347214509387,0.20728624157876438,0.002263200798177546,0.2333768938041652],[0,0,0.7091274871193187,0.01409501209262096,0],[0,0,-12.685510883358853,0.03256690667351292,0],[0,0,0,0,1]],"Gam":[0.00023599309506957083,0.026090652225400808,0.2908725128806814,12.685510883358855,0],"C":[1,0,0,0,0],"Mk":[0.7752862199176465,16.59796230179482,0.004870355114342612,-0.1311065557865073,0.00026045958622649556],"duMax":0.04106657063516069,"Ts":0.03333333333333333,"Kx":[2.460266076501352,1.1848169785497253,0.4012292084195584,0.007747319882186638],"Kb":[0.2176951747107605,0.19411706818577606,0.20739259761432324],"Kd":2.0204340489304182,"Ki":3.834320653629949,"Izone":0.013434352484613395,"Imax":0.026179938779914945},"mpcK":{"Phi":[[1,0.033305570981226426,0.003654702250198922,2.8989613583778695e-05,0.003890695345268493],[0,0.9983347214509387,0.20728624157876438,0.002263200798177546,0.2333768938041652],[0,0,0.7091274871193187,0.01409501209262096,0],[0,0,-12.685510883358853,0.03256690667351292,0],[0,0,0,0,1]],"Gam":[0.00023599309506957083,0.026090652225400808,0.2908725128806814,12.685510883358855,0],"C":[1,0,0,0,0],"Mk":[0.8514193349841139,22.65940068011332,0.002915517363023236,-0.07409293886480305,0.003764103984958962],"Ts":0.03333333333333333,"ns":8,"Ki":6.950129146671001,"Izone":0.011460767733232211,"Imax":0.026179938779914945},"mpc":{"p":36,"blocks":[2,2,4,8,20],"wy":1,"wv":0.0010828600572141268,"wdu":0.47505574258811417,"sy":0.25,"sv":0.5,"su":0.3490658503988659,"uMax":0.17453292519943295,"duMax":0.04106657063516069,"yMax":0.125,"ecr":100000,"ecrY":1},"solid":{"sl":{"Tend":6,"half":0.15,"travel":0.13,"ballPar":[0.7142857142857143,9.81,0.003,0.05,0.001],"bouncePar":[0.6,0.4,0.02,0.4],"rho":0.25,"wn":30,"zeta":0.8,"phiDotMax":4.927988476219283,"phiMax":1.0471975511965976,"deadband":0.007853981633974482,"backlash":0.008726646259971648,"quantPhi":0.0015707963267948964,"camDelaySteps":54,"noiseStd":0.0005,"pixel":0.0005,"dropout":0.01,"thMax":0.17453292519943295,"thOffset":[0,0],"camScale":1,"camOffset":[0,0]},"st":{"dt":0.0016666666666666668,"Ts":0.03333333333333333,"Tcam":0.03333333333333333,"Tpwm":0.02,"camDelayMax":240},"radius":0.02,"band":0.005,"half":0.15,"travel":0.13,"kappa":0.4,"kb":0.7142857142857143,"restitution":0.6,"horn":0.03,"lever":0.12},"hollow":{"sl":{"Tend":6,"half":0.15,"travel":0.13,"ballPar":[0.6000000000000001,9.81,0.003,0.05,0.001],"bouncePar":[0.85,0.4,0.02,0.6666666666666666],"rho":0.25,"wn":30,"zeta":0.8,"phiDotMax":4.927988476219283,"phiMax":1.0471975511965976,"deadband":0.007853981633974482,"backlash":0.008726646259971648,"quantPhi":0.0015707963267948964,"camDelaySteps":54,"noiseStd":0.0005,"pixel":0.0005,"dropout":0.01,"thMax":0.17453292519943295,"thOffset":[0,0],"camScale":1,"camOffset":[0,0]},"st":{"dt":0.0016666666666666668,"Ts":0.03333333333333333,"Tcam":0.03333333333333333,"Tpwm":0.02,"camDelayMax":240},"radius":0.02,"band":0.005,"half":0.15,"travel":0.13,"kappa":0.6666666666666666,"kb":0.6000000000000001,"restitution":0.85,"horn":0.03,"lever":0.12},"pathLim":0.11};
+</script>
+<script>
+// Ball-on-plate simulation in plain JavaScript (no browser code, no libraries).
+// A copy of the Simulink model model/build_bop_model.m and the MATLAB functions
+// in +bop/. Each function names its MATLAB source. web/test_sim.js compares this
+// file with reference runs from Simulink (scripts/export_web.m).
+const BOP = (function () {
+  'use strict';
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  const roundMat = v => Math.sign(v) * Math.round(Math.abs(v));      // MATLAB round
+  const arr = v => (Array.isArray(v) ? v : [v]);
+
+  // ---- +bop/+model/ballAccel.m ---------------------------------------------
+  function ballAccel(q, u, B) {
+    const [x, y, vx, vy] = q, [thx, thy, wx, wy] = u;
+    const ax = B.kb * (B.g * Math.sin(thx) + x * wx * wx + y * wx * wy);
+    const ay = B.kb * (B.g * Math.sin(thy) + y * wy * wy + x * wx * wy);
+    const spd = Math.hypot(vx, vy);
+    const fr = spd > 0 ? B.kb * B.muRoll * B.g * Math.tanh(spd / B.vEps) / spd : 0;
+    return [ax - (fr + B.cVisc) * vx, ay - (fr + B.cVisc) * vy];
+  }
+
+  function rk4Ball(q, u, B, h) {
+    if (h <= 0) return q;
+    const f = s => { const a = ballAccel(s, u, B); return [s[2], s[3], a[0], a[1]]; };
+    const add = (s, d, c) => s.map((v, i) => v + c * d[i]);
+    const k1 = f(q), k2 = f(add(q, k1, h / 2)), k3 = f(add(q, k2, h / 2)), k4 = f(add(q, k3, h));
+    return q.map((v, i) => v + h / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+  }
+
+  function surface(x, y, vx, vy, u) {
+    const zs = -x * Math.sin(u[0]) - y * Math.sin(u[1]);
+    const vs = -(vx * Math.sin(u[0]) + x * Math.cos(u[0]) * u[2]) -
+                (vy * Math.sin(u[1]) + y * Math.cos(u[1]) * u[3]);
+    return [zs, vs];
+  }
+
+  // ---- +bop/+model/ballStep.m: rolling, flight, bounce ----------------------
+  // s = [x y vx vy zw vzw sx sy]; vzw = NaN marks rolling contact
+  function ballStep(s, u, B, dt) {
+    const vRest = 0.05;
+    let x = s[0], y = s[1], vx = s[2], vy = s[3], zw = s[4], vzw = s[5], sx = s[6], sy = s[7];
+    let [zs, vs] = surface(x, y, vx, vy, u);
+    const inContact = Number.isNaN(vzw) || ((zw - zs <= 1e-9) && (vzw - vs <= vRest));
+    if (inContact) {
+      const q = rk4Ball([x, y, vx, vy], u, B, dt);
+      [zs, vs] = surface(q[0], q[1], q[2], q[3], u);
+      return { sn: [q[0], q[1], q[2], q[3], zs, NaN, q[2], q[3]], z: 0, contact: 1 };
+    }
+    // flight: first touchdown inside this step
+    const h0 = zw - zs, w0 = vzw - vs;
+    let tau = dt + 1;
+    if (h0 <= 0 && w0 < 0) {
+      tau = 0;
+    } else {
+      const disc = w0 * w0 + 2 * B.g * h0;
+      if (disc >= 0) {
+        const t1 = (w0 + Math.sqrt(disc)) / B.g;
+        if (t1 <= dt) tau = Math.max(t1, 0);
+      }
+    }
+    if (tau > dt) {
+      x += vx * dt; y += vy * dt;
+      zw += vzw * dt - B.g * dt * dt / 2;
+      vzw -= B.g * dt;
+      [zs] = surface(x, y, vx, vy, u);
+      return { sn: [x, y, vx, vy, zw, vzw, sx, sy], z: zw - zs, contact: 0 };
+    }
+    // fly to the impact, then apply it
+    x += vx * tau; y += vy * tau;
+    vzw -= B.g * tau;
+    [zs, vs] = surface(x, y, vx, vy, u);
+    const vn = vzw - vs, vnNew = -B.e * vn;
+    const slipX = vx - sx, slipY = vy - sy, ns = Math.hypot(slipX, slipY);
+    if (ns > 0) {
+      const jRoll = ns * B.kappa / (1 + B.kappa);
+      const j = Math.min(B.mu * (1 + B.e) * Math.abs(vn), jRoll);
+      const dx = slipX / ns, dy = slipY / ns;
+      vx -= j * dx; vy -= j * dy;
+      sx += (j / B.kappa) * dx; sy += (j / B.kappa) * dy;
+    }
+    const rest = dt - tau;
+    if (vnNew < vRest) {                       // too slow to bounce: rolls on
+      vx = (vx + B.kappa * sx) / (1 + B.kappa);
+      vy = (vy + B.kappa * sy) / (1 + B.kappa);
+      const q = rk4Ball([x, y, vx, vy], u, B, rest);
+      [zs] = surface(q[0], q[1], q[2], q[3], u);
+      return { sn: [q[0], q[1], q[2], q[3], zs, NaN, q[2], q[3]], z: 0, contact: 1 };
+    }
+    vzw = vs + vnNew;
+    x += vx * rest; y += vy * rest;
+    zw = zs + vzw * rest - B.g * rest * rest / 2;
+    vzw -= B.g * rest;
+    const [zs2] = surface(x, y, vx, vy, u);
+    zw = Math.max(zw, zs2);
+    return { sn: [x, y, vx, vy, zw, vzw, sx, sy], z: zw - zs2, contact: 0 };
+  }
+
+  // ---- +bop/+sim/makeRef.m, refGen.m, paths.m ---------------------------------
+  function makeRef(pts, speed, loop, holdTol) {
+    return { pts, n: pts.length, speed: speed || 0, loop: !!loop, holdTol: holdTol === undefined ? 0.010 : holdTol };
+  }
+
+  function refGen(t, y, R, st) {
+    const p1 = R.pts[0], n = R.n;
+    if (n <= 1 || R.speed <= 0) return { r: p1, st };
+    if (st[0] < 0.5) {
+      const nst = Math.hypot(y[0] - p1[0], y[1] - p1[1]) < R.holdTol ? [1, t] : st;
+      return { r: p1, st: nst };
+    }
+    let L = 0;
+    for (let k = 0; k < n - 1; k++) L += Math.hypot(R.pts[k + 1][0] - R.pts[k][0], R.pts[k + 1][1] - R.pts[k][1]);
+    let s = R.speed * (t - st[1]);
+    if (R.loop) {
+      const c = Math.hypot(R.pts[n - 1][0] - p1[0], R.pts[n - 1][1] - p1[1]);
+      if (c > 1e-9) L += c;
+      s = ((s % L) + L) % L;
+    } else if (s >= L) {
+      return { r: R.pts[n - 1], st };
+    }
+    for (let k = 0; k < n; k++) {
+      const a = R.pts[k], b = k < n - 1 ? R.pts[k + 1] : p1;
+      const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (s <= seg || k === n - 1) {
+        const f = seg > 0 ? Math.min(s / seg, 1) : 0;
+        return { r: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], st };
+      }
+      s -= seg;
+    }
+    return { r: p1, st };
+  }
+
+  function paths(kind, sz, lim, custom) {
+    const a = Math.min(sz, lim);
+    let pts, loop = false;
+    switch (kind) {
+      case 'centre': pts = [[0, 0]]; break;
+      case 'zigzag': {
+        pts = [];
+        for (let k = 0; k <= 6; k++) pts.push([a * (k % 2 ? -1 : 1), -a + 2 * a * k / 6]);
+        break;
+      }
+      case 'circle':
+        pts = [];
+        for (let k = 0; k < 40; k++) { const th = 2 * Math.PI * k / 40; pts.push([a * Math.cos(th), a * Math.sin(th)]); }
+        loop = true;
+        break;
+      case 'square': pts = [[a, a], [-a, a], [-a, -a], [a, -a]]; loop = true; break;
+      case 'figure8':
+        pts = [];
+        for (let k = 0; k < 48; k++) { const th = 2 * Math.PI * k / 48; pts.push([a * Math.sin(th), a * Math.sin(th) * Math.cos(th)]); }
+        loop = true;
+        break;
+      case 'line': pts = [[-a, 0], [a, 0]]; break;
+      case 'custom': pts = custom && custom.length ? custom : [[0, 0]]; break;
+      default: throw new Error('Unknown path ' + kind);
+    }
+    return { pts: pts.map(p => [clamp(p[0], -lim, lim), clamp(p[1], -lim, lim)]), loop };
+  }
+
+  // ---- random numbers (the web version has its own noise sequence) ------------
+  function rng(seed) {
+    let a = seed >>> 0;
+    const uni = () => {                         // mulberry32
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - uni())) * Math.cos(2 * Math.PI * uni());
+    return { uni, gauss };
+  }
+
+  // ---- +bop/+ctrl: Kalman filter and zone integrator (one axis) -----------------
+  const mv = (M, x) => M.map(r => r.reduce((a, v, i) => a + v * x[i], 0));
+  function kfMeas(G, y, s) {
+    const out = s.slice();
+    const e = y - s[0];
+    for (let i = 0; i < 5; i++) out[i] = s[i] + G.Mk[i] * e;
+    return out;
+  }
+  function kfTime(G, sp, u) {
+    const nb = sp.length - 5, b = sp.slice(5);
+    const x = mv(G.Phi, sp.slice(0, 5));
+    const out = x.map((v, i) => v + G.Gam[i] * b[0]);
+    for (let i = 1; i < nb; i++) out.push(b[i]);
+    out.push(u);
+    return out;
+  }
+  function zoneInt(G, p, v, I, thMax) {
+    let In = I;
+    if (Math.abs(p) < G.Izone) In = I + G.Ki * G.Ts * p;
+    In = clamp(In, -G.Imax, G.Imax);
+    let u = v - In;
+    if (Math.abs(u) > thMax && Math.abs(In) > Math.abs(I)) { In = I; u = v - In; }
+    return { u, In };
+  }
+
+  // ---- controllers: same interface, one call per camera frame ---------------------
+  function makePID(G, pos0, thMax) {                     // buildPID
+    const I = [0, 0], F = [G.D * (0 - pos0[0]), G.D * (0 - pos0[1])];
+    return (ref, y) => {
+      const th = [0, 0];
+      for (let a = 0; a < 2; a++) {
+        const e = ref[a] - y[a], ed = G.c * ref[a] - y[a];
+        const dOut = G.N * (G.D * ed - F[a]) / (1 + G.N * G.Ts);
+        const fNew = F[a] + G.Ts * dOut;
+        let iNew = I[a] + G.I * G.Ts * e * (Math.abs(e) < G.Izone ? 1 : 0);
+        let u = G.P * (G.b * ref[a] - y[a]) + iNew + dOut;
+        const t0 = clamp(u, -thMax, thMax);
+        if (u !== t0 && Math.sign(e) === Math.sign(u)) iNew = I[a];
+        u = G.P * (G.b * ref[a] - y[a]) + iNew + dOut;
+        th[a] = clamp(u, -thMax, thMax);
+        I[a] = iNew; F[a] = fNew;
+      }
+      return th;
+    };
+  }
+
+  function makeLQR(G, pos0, thMax) {                     // lqgStep.m
+    const nb = arr(G.Kb).length;
+    const Kb = arr(G.Kb), Kx = G.Kx;
+    const S = [0, 1].map(a => [pos0[a]].concat(new Array(4 + nb).fill(0)));
+    const I = [0, 0];
+    return (ref, y) => {
+      const th = [0, 0];
+      for (let a = 0; a < 2; a++) {
+        const sp = kfMeas(G, y[a] - ref[a], S[a]);
+        const b = sp.slice(5);
+        let v = 0;
+        for (let i = 0; i < 4; i++) v -= Kx[i] * sp[i];
+        for (let i = 0; i < nb; i++) v -= Kb[i] * b[i];
+        v -= G.Kd * sp[4];
+        const z = zoneInt(G, sp[0], v, I[a], thMax);
+        v = z.u; I[a] = z.In;
+        v = clamp(v, b[nb - 1] - G.duMax, b[nb - 1] + G.duMax);
+        v = clamp(v, -thMax, thMax);
+        S[a] = kfTime(G, sp, v);
+        th[a] = v;
+      }
+      return th;
+    };
+  }
+
+  // ---- the MPC problem of bop.design.mpc for one axis, as a small QP ---------------
+  // Variables z = [moves du_1..du_m, slack e]. Same cost and limits as the MPC
+  // block: position and velocity weights over the horizon, move weight, hard
+  // tilt and rate limits, soft position limit.
+  function buildMPC(K, M) {
+    const ns = K.ns, nb = ns - 5, p = M.p, blocks = arr(M.blocks), m = blocks.length;
+    const A = [];
+    for (let i = 0; i < 5; i++) {
+      const row = K.Phi[i].slice();
+      for (let j = 0; j < nb; j++) row.push(j === 0 ? K.Gam[i] : 0);
+      A.push(row);
+    }
+    for (let i = 0; i < nb; i++) {
+      const row = new Array(ns).fill(0);
+      if (i < nb - 1) row[5 + i + 1] = 1;
+      A.push(row);
+    }
+    const B = new Array(ns).fill(0); B[ns - 1] = 1;
+    const step = (x, u) => { const n = mv(A, x); n[ns - 1] += B[ns - 1] * u; return n; };
+    const starts = []; let c = 0;
+    for (const b of blocks) { starts.push(c); c += b; }
+    // effect of one unit of each input on position and velocity over the horizon
+    const resp = (uFun) => {
+      let x = new Array(ns).fill(0); const pos = [], vel = [];
+      for (let i = 0; i < p; i++) { x = step(x, uFun(i)); pos.push(x[0]); vel.push(x[1]); }
+      return { pos, vel };
+    };
+    const Gm = starts.map(s0 => resp(i => (i >= s0 ? 1 : 0)));   // per move
+    const Gu = resp(() => 1);                                     // last command
+    // effect of the state: A^i
+    const Fpos = [], Fvel = [];
+    let P = A.map(r => r.slice());
+    for (let i = 0; i < p; i++) {
+      Fpos.push(P[0].slice()); Fvel.push(P[1].slice());
+      P = P.map(r => { const o = new Array(ns).fill(0); for (let a = 0; a < ns; a++) { const v = r[a]; if (v !== 0) for (let b = 0; b < ns; b++) o[b] += v * A[a][b]; } return o; });
+    }
+    const wp = (M.wy / M.sy) ** 2, wv = (M.wv / M.sv) ** 2, wd = (M.wdu / M.su) ** 2;
+    const n = m + 1;
+    const H = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let a = 0; a < m; a++) {
+      for (let b = 0; b < m; b++) {
+        let s = 0;
+        for (let i = 0; i < p; i++) s += wp * Gm[a].pos[i] * Gm[b].pos[i] + wv * Gm[a].vel[i] * Gm[b].vel[i];
+        H[a][b] = 2 * s;
+      }
+      H[a][a] += 2 * wd;
+    }
+    H[m][m] = 2 * M.ecr;
+    const Hinv = invert(H);
+    // constraints a'z >= b; the state-dependent right-hand sides are set in solve()
+    const con = [];
+    for (let k = 0; k < m; k++) {                    // rate
+      const e = new Array(n).fill(0); e[k] = 1;
+      con.push({ a: e, kind: 'rate' });
+      con.push({ a: e.map(v => -v), kind: 'rate' });
+    }
+    for (let k = 0; k < m; k++) {                    // tilt, at each block
+      const e = new Array(n).fill(0);
+      for (let j = 0; j <= k; j++) e[j] = 1;
+      con.push({ a: e, kind: 'umin' });
+      con.push({ a: e.map(v => -v), kind: 'umax' });
+    }
+    for (let i = 0; i < p; i++) {                    // position, soft
+      const e = new Array(n).fill(0);
+      for (let k = 0; k < m; k++) e[k] = Gm[k].pos[i] / M.sy;
+      const up = e.map(v => -v); up[m] = 1 * M.ecrY;
+      const lo = e.slice(); lo[m] = 1 * M.ecrY;
+      con.push({ a: up, kind: 'ymax', i });
+      con.push({ a: lo, kind: 'ymin', i });
+    }
+    { const e = new Array(n).fill(0); e[m] = 1; con.push({ a: e, kind: 'slack' }); }
+
+    return function solve(x, lastU) {
+      const pos0 = [], vel0 = [];
+      for (let i = 0; i < p; i++) {
+        let a = Gu.pos[i] * lastU, b = Gu.vel[i] * lastU;
+        for (let j = 0; j < ns; j++) { a += Fpos[i][j] * x[j]; b += Fvel[i][j] * x[j]; }
+        pos0.push(a); vel0.push(b);
+      }
+      const f = new Array(n).fill(0);
+      for (let a = 0; a < m; a++) {
+        let s = 0;
+        for (let i = 0; i < p; i++) s += wp * Gm[a].pos[i] * pos0[i] + wv * Gm[a].vel[i] * vel0[i];
+        f[a] = 2 * s;
+      }
+      const rhs = con.map(q => {
+        switch (q.kind) {
+          case 'rate': return -M.duMax;
+          case 'umin': return -M.uMax - lastU;
+          case 'umax': return -M.uMax + lastU;
+          case 'ymax': return (pos0[q.i] - M.yMax) / M.sy;
+          case 'ymin': return (-pos0[q.i] - M.yMax) / M.sy;
+          default: return 0;
+        }
+      });
+      const z = dualActiveSet(Hinv, f, con.map(q => q.a), rhs);
+      return lastU + z[0];
+    };
+  }
+
+  function invert(M) {
+    const n = M.length, A = M.map((r, i) => r.concat(Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))));
+    for (let c = 0; c < n; c++) {
+      let piv = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+      [A[c], A[piv]] = [A[piv], A[c]];
+      const d = A[c][c];
+      for (let j = 0; j < 2 * n; j++) A[c][j] /= d;
+      for (let r = 0; r < n; r++) {
+        if (r !== c && A[r][c] !== 0) { const q = A[r][c]; for (let j = 0; j < 2 * n; j++) A[r][j] -= q * A[c][j]; }
+      }
+    }
+    return A.map(r => r.slice(n));
+  }
+
+  // Goldfarb-Idnani dual active-set method: min 1/2 z'Hz + f'z, a_i'z >= b_i
+  function dualActiveSet(Hinv, f, a, b) {
+    const n = f.length;
+    const dot = (p, q) => { let s = 0; for (let i = 0; i < n; i++) s += p[i] * q[i]; return s; };
+    let z = mv(Hinv, f).map(v => -v);
+    let act = [], u = [];
+    for (let iter = 0; iter < 200; iter++) {
+      let p = -1, worst = -1e-8;      // violations below this are rounding
+      for (let i = 0; i < a.length; i++) {
+        const s = dot(a[i], z) - b[i];
+        if (s < worst) { worst = s; p = i; }
+      }
+      if (p < 0) return z;
+      const nP = a[p];
+      let uP = 0;
+      for (let inner = 0; inner < 50; inner++) {
+        const HnP = mv(Hinv, nP);
+        let r = [];
+        let step = HnP.slice();
+        if (act.length) {
+          const N = act.map(i => a[i]);
+          const HN = N.map(q => mv(Hinv, q));
+          const S = N.map(q => HN.map(h => dot(q, h)));
+          const Si = invert(S);
+          const rhs = N.map(q => dot(q, HnP));
+          r = Si.map(row => row.reduce((acc, v, i) => acc + v * rhs[i], 0));
+          for (let j = 0; j < act.length; j++) for (let i = 0; i < n; i++) step[i] -= r[j] * HN[j][i];
+        }
+        let t1 = Infinity, kDrop = -1;
+        for (let j = 0; j < r.length; j++) {
+          if (r[j] > 1e-12) { const q = u[j] / r[j]; if (q < t1) { t1 = q; kDrop = j; } }
+        }
+        const den = dot(step, nP);
+        const sP = dot(nP, z) - b[p];
+        // a constraint that depends on the active ones gives no step: drop one instead
+        const t2 = den > 1e-10 * dot(nP, HnP) ? -sP / den : Infinity;
+        const t = Math.min(t1, t2);
+        if (!Number.isFinite(t)) return z;              // nothing can improve it further
+        if (Number.isFinite(t2)) for (let i = 0; i < n; i++) z[i] += t * step[i];
+        for (let j = 0; j < u.length; j++) u[j] -= t * r[j];
+        uP += t;
+        if (t === t2) { act.push(p); u.push(uP); break; }
+        act.splice(kDrop, 1); u.splice(kDrop, 1);
+      }
+    }
+    return z;
+  }
+
+  function makeMPC(K, M, pos0, thMax, cache) {          // buildMPC
+    if (!cache.solve) cache.solve = buildMPC(K, M);
+    const solve = cache.solve, ns = K.ns;
+    const S = [0, 1].map(a => [pos0[a]].concat(new Array(ns - 1).fill(0)));
+    const I = [0, 0], last = [0, 0];
+    return (ref, y) => {
+      const th = [0, 0];
+      for (let a = 0; a < 2; a++) {
+        const xk = kfMeas(K, y[a] - ref[a], S[a]);
+        const v = solve(xk, last[a]);
+        last[a] = v;
+        const z = zoneInt(K, xk[0], v, I[a], thMax);
+        I[a] = z.In;
+        const u = clamp(z.u, -thMax, thMax);
+        S[a] = kfTime(K, xk, u);
+        th[a] = u;
+      }
+      return th;
+    };
+  }
+
+  // ---- the whole rig: build_bop_model.m at the fixed solver step ----------------
+  // scen = { ball, pos0, vel0, h0, noSpin, ref (makeRef), Tend, noisy, seed }
+  function simulate(G, scen, ctrl, cache) {
+    const PB = scen.ball === 'hollow' ? G.hollow : G.solid, sl = PB.sl, st = PB.st;
+    const dt = st.dt, nCam = Math.round(st.Tcam / dt), nPwm = Math.round(st.Tpwm / dt);
+    const noisy = scen.noisy !== false;
+    const noiseStd = noisy ? sl.noiseStd : 0, pixel = noisy ? sl.pixel : 0, dropout = noisy ? sl.dropout : 0;
+    const B = {
+      kb: sl.ballPar[0], g: sl.ballPar[1], muRoll: sl.ballPar[2], cVisc: sl.ballPar[3], vEps: sl.ballPar[4],
+      e: sl.bouncePar[0], mu: sl.bouncePar[1], kappa: sl.bouncePar[3],
+    };
+    const thMax = sl.thMax;
+    cache = cache || {};
+    let step;
+    if (ctrl === 0) step = makePID(G.pid, scen.pos0, thMax);
+    else if (ctrl === 1) step = makeLQR(G.lqr, scen.pos0, thMax);
+    else step = makeMPC(G.mpcK, G.mpc, scen.pos0, thMax, cache);
+    const R = scen.ref || makeRef([[0, 0]]);
+    const rand = rng(scen.seed === undefined ? 501 : scen.seed);
+
+    const nf = scen.noSpin ? 0 : 1;
+    let s = [scen.pos0[0], scen.pos0[1], scen.vel0[0], scen.vel0[1], scen.h0 || 0, 0, scen.vel0[0] * nf, scen.vel0[1] * nf];
+    // servo: state [phi, rate] per axis, backlash output, held PWM command
+    const phi = [0, 0], rate = [0, 0], blOut = [0, 0], pwm = [0, 0];
+    let cmd = [0, 0], meas = [scen.pos0[0], scen.pos0[1]], last = null;
+    let refState = [0, 0], ref = [0, 0];
+
+    const D = sl.camDelaySteps;
+    const out = { t: [], pos: [], z: [], contact: [], th: [], phi: [], tc: [], cmd: [], ref: [], meas: [], dt };
+    const hist = [];
+    const dz = (v, w) => (v > w ? v - w : v < -w ? v + w : 0);
+    const nSteps = Math.floor(scen.Tend / dt + 1e-9);
+
+    for (let k = 0; k <= nSteps; k++) {
+      const t = k * dt;
+      // servo outputs at this step: backlash -> linkage -> tilt
+      const th = [0, 0], dth = [0, 0];
+      for (let a = 0; a < 2; a++) {
+        const w = sl.backlash / 2;
+        if (phi[a] - blOut[a] > w) blOut[a] = phi[a] - w;
+        else if (phi[a] - blOut[a] < -w) blOut[a] = phi[a] + w;
+        const sn = sl.rho * Math.sin(blOut[a]);
+        th[a] = Math.asin(sn) + sl.thOffset[a];
+        dth[a] = sl.rho * Math.cos(blOut[a]) * clamp(rate[a], -sl.phiDotMax, sl.phiDotMax) / Math.sqrt(1 - sn * sn);
+      }
+      // ball
+      const pos = [s[0], s[1]];
+      const b = ballStep(s, [th[0], th[1], dth[0], dth[1]], B, dt);
+      hist.push(pos);
+      // camera: latency, then one frame every nCam steps
+      if (k % nCam === 0) {
+        const seen = k >= D ? hist[k - D] : scen.pos0;
+        const y = [0, 0];
+        for (let a = 0; a < 2; a++) {
+          let v = seen[a] * sl.camScale + sl.camOffset[a] + noiseStd * rand.gauss();
+          if (pixel > 0) v = pixel * roundMat(v / pixel);
+          y[a] = v;
+        }
+        const r = rand.uni();
+        if (last === null || r >= dropout) last = y;
+        meas = last;
+        const q = refGen(t, meas, R, refState);
+        ref = q.r; refState = q.st;
+        cmd = step(ref, meas);
+        out.tc.push(t); out.cmd.push(cmd); out.ref.push(ref); out.meas.push(meas);
+      }
+      // PWM frame
+      if (k % nPwm === 0) {
+        for (let a = 0; a < 2; a++) {
+          const v = clamp(Math.sin(cmd[a]) / sl.rho, -1, 1);
+          const c = clamp(Math.asin(v), -sl.phiMax, sl.phiMax);
+          pwm[a] = sl.quantPhi * roundMat(c / sl.quantPhi);
+        }
+      }
+      out.t.push(t); out.pos.push(pos); out.z.push(b.z); out.contact.push(b.contact);
+      out.th.push(th); out.phi.push([blOut[0], blOut[1]]);
+      // the Stop block ends the run after the step in which the ball is off the plate
+      if (Math.max(Math.abs(pos[0]), Math.abs(pos[1])) > sl.travel) break;
+      s = b.sn;
+      // servo integrator (RK4, as the model's ode4)
+      for (let a = 0; a < 2; a++) {
+        const f = (x, v) => {
+          const vv = clamp(v, -sl.phiDotMax, sl.phiDotMax);
+          let acc = sl.wn * sl.wn * dz(pwm[a] - x, sl.deadband / 2) - 2 * sl.zeta * sl.wn * vv;
+          if ((v >= sl.phiDotMax && acc > 0) || (v <= -sl.phiDotMax && acc < 0)) acc = 0;
+          return [vv, acc];
+        };
+        const x = phi[a], v = rate[a];
+        const k1 = f(x, v);
+        const k2 = f(x + dt / 2 * k1[0], v + dt / 2 * k1[1]);
+        const k3 = f(x + dt / 2 * k2[0], v + dt / 2 * k2[1]);
+        const k4 = f(x + dt * k3[0], v + dt * k3[1]);
+        phi[a] = clamp(x + dt / 6 * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]), -sl.phiMax, sl.phiMax);
+        rate[a] = clamp(v + dt / 6 * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]), -sl.phiDotMax, sl.phiDotMax);
+      }
+    }
+    out.m = metrics(out, scen, PB);
+    return out;
+  }
+
+  // ---- +bop/+sim/metrics.m ---------------------------------------------------------
+  function metrics(o, scen, PB) {
+    const t = o.t, n = t.length, band = PB.band, Tend = scen.Tend;
+    const refAt = new Array(n);
+    let moving = false, tPath = Infinity;
+    const r0 = o.ref[0];
+    for (let c = 0; c < o.ref.length; c++) {
+      if (Math.hypot(o.ref[c][0] - r0[0], o.ref[c][1] - r0[1]) > 1e-9) { moving = true; tPath = o.tc[c]; break; }
+    }
+    let c = 0;
+    const r = new Array(n);
+    for (let k = 0; k < n; k++) {
+      while (c + 1 < o.tc.length && o.tc[c + 1] <= t[k] + 1e-12) c++;
+      refAt[k] = o.ref[c];
+      r[k] = Math.hypot(o.pos[k][0] - o.ref[c][0], o.pos[k][1] - o.ref[c][1]);
+    }
+    const stoppedEarly = t[n - 1] < Tend - 2 * o.dt;
+    let lastOut = -1;
+    for (let k = n - 1; k >= 0; k--) if (r[k] > band) { lastOut = k; break; }
+    let ts;
+    if (stoppedEarly || r[n - 1] > band) ts = Infinity;
+    else if (lastOut < 0) ts = 0;
+    else ts = t[lastOut + 1];
+    const m = { ts, failed: !Number.isFinite(ts), offPlate: stoppedEarly };
+    const nrm = Math.max(Math.hypot(scen.pos0[0], scen.pos0[1]), Number.EPSILON);
+    let minProj = Infinity, itae = 0;
+    for (let k = 0; k < n; k++) {
+      minProj = Math.min(minProj, (o.pos[k][0] * scen.pos0[0] + o.pos[k][1] * scen.pos0[1]) / nrm);
+      if (k > 0) itae += (t[k] - t[k - 1]) * (t[k] * r[k] + t[k - 1] * r[k - 1]) / 2;
+    }
+    m.overshoot = 1000 * Math.max(0, -minProj);
+    m.itae = itae;
+    let peak = 0, sat = 0;
+    for (const u of o.cmd) {
+      peak = Math.max(peak, Math.abs(u[0]), Math.abs(u[1]));
+      if (Math.abs(u[0]) >= 0.999 * PB.sl.thMax || Math.abs(u[1]) >= 0.999 * PB.sl.thMax) sat++;
+    }
+    m.peakTilt = peak * 180 / Math.PI;
+    m.satFrac = sat / o.cmd.length;
+    let travel = 0;
+    for (let k = 1; k < n; k++) travel += Math.abs(o.phi[k][0] - o.phi[k - 1][0]) + Math.abs(o.phi[k][1] - o.phi[k - 1][1]);
+    m.servoTravel = travel * 180 / Math.PI;
+    let sum = 0, cnt = 0;
+    const tcEnd = o.tc[o.tc.length - 1];
+    for (let k = 1; k < o.cmd.length; k++) {
+      if (o.tc[k - 1] >= tcEnd - 1) {
+        for (let a = 0; a < 2; a++) { const d = o.cmd[k][a] - o.cmd[k - 1][a]; sum += d * d; cnt++; }
+      }
+    }
+    m.jitter = cnt ? Math.sqrt(sum / cnt) * 180 / Math.PI : NaN;
+    let re = 0, rc = 0;
+    for (let k = 0; k < n; k++) if (t[k] >= t[n - 1] - 0.5) { re += r[k]; rc++; }
+    m.rEnd = 1000 * re / rc;
+    m.trackRMS = NaN; m.trackMax = NaN;
+    if (moving) {
+      let q = 0, q2 = 0, mx = 0;
+      for (let k = 0; k < n; k++) if (t[k] >= tPath) { q += r[k] * r[k]; q2++; mx = Math.max(mx, r[k]); }
+      m.trackRMS = 1000 * Math.sqrt(q / q2);
+      m.trackMax = 1000 * mx;
+    }
+    // drop: first touchdown, number and height of the bounces
+    m.tLand = 0; m.nBounce = 0; m.maxBounce = 0;
+    const Z = o.z;
+    let first = -1;
+    if (Z[0] < 1e-4) first = 0;
+    else for (let k = 0; k + 1 < n; k++) if (Z[k + 1] > Z[k] || Z[k + 1] < 1e-4) { first = k; break; }
+    if (first < 0) m.tLand = Infinity;
+    else {
+      m.tLand = t[first];
+      for (let k = first + 1; k < n - 1; k++) {
+        if (Z[k] > Z[k - 1] && Z[k] >= Z[k + 1] && Z[k] > 5e-4) { m.nBounce++; m.maxBounce = Math.max(m.maxBounce, 1000 * Z[k]); }
+      }
+    }
+    return m;
+  }
+
+  return { simulate, makeRef, paths, buildMPC, ballStep, refGen, rng, clamp };
+})();
+if (typeof module !== 'undefined') module.exports = BOP;
+
+</script>
+<script>
+// Window of the Ball on Plate Playground: same controls as +bop/+app/playground.m.
+(function () {
+  'use strict';
+  const G = GAINS, $ = id => document.getElementById(id);
+  const P0 = G.solid, half = 1000 * P0.half, travel = 1000 * P0.travel, rb = P0.radius;
+  const FPS = 30, DEG = 180 / Math.PI;
+  const NAMES = ['PID*', 'LQR*', 'MPC*'];
+  const COL = { ctrl: ['#2a78d6', '#eb6834', '#1baf7a'], x: '#2a78d6', y: '#eb6834', ink: '#0b0b0b', ink2: '#52514e', muted: '#898781', grid: '#e1e0d9', base: '#c3c2b7', band: '#f0efec', crit: '#b92f2f' };
+  const clamp = BOP.clamp;
+
+  const C = { x: 100, y: 80, h: 150, speed: 0, dir: 0, ball: 'solid', task: 'centre', pathSpeed: 100, size: 80, ctrl: 1, compare: false, custom: [] };
+  const LIM = {
+    x: [-travel, travel], y: [-travel, travel], h: [0, 300], speed: [0, 1000], dir: [-3600, 3600],
+    pathSpeed: [20, 300], size: [20, 1000 * G.pathLim],
+  };
+  const S = { drawing: false, playing: false, f: 0, run: 0, D: [], results: [], log: [], scen: null, az: -35, el: 22, zoom: 1, pb: 1 };
+  const cache = {};
+
+  // ---- settings ------------------------------------------------------------------
+  function currentPath() {
+    return BOP.paths(C.task, C.size / 1000, G.pathLim, C.custom.map(p => [p[0] / 1000, p[1] / 1000]));
+  }
+  const closed = (pts, loop) => (loop ? pts.concat([pts[0]]) : pts);
+
+  function sync() {
+    for (const k of Object.keys(LIM)) $(k).value = Math.round(C[k]);
+    $('ball').value = C.ball; $('task').value = C.task; $('ctrl').value = C.ctrl; $('compare').checked = C.compare;
+    const isPath = C.task !== 'centre';
+    $('pathSpeed').disabled = !isPath;
+    $('size').disabled = !isPath || C.task === 'custom';
+    $('ctrl').disabled = C.compare;
+    $('draw').textContent = S.drawing ? 'Done' : 'Draw path';
+    $('draw').classList.toggle('on', S.drawing);
+    $('mapHint').textContent = S.drawing
+      ? `Click the map to add points (${C.custom.length} of 64), then press Done.`
+      : 'Click the map to set where the ball starts. Dotted square: the ball is lost past it.';
+  }
+
+  function changed() {
+    S.playing = false;
+    S.D = [];
+    sync();
+    preview();
+  }
+
+  function say(t) { $('status').textContent = t; }
+
+  // ---- 3-D projection --------------------------------------------------------------
+  const rig = $('rig'), rc = rig.getContext('2d');
+  let W = 0, H = 0, cam = null;
+  function fit(cv) {
+    const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    return { w: r.width, h: r.height, d };
+  }
+  function setCamera() {
+    const a = S.az * Math.PI / 180, e = S.el * Math.PI / 180;
+    const dir = [Math.cos(e) * Math.sin(a), -Math.cos(e) * Math.cos(a), Math.sin(e)];     // towards the camera
+    const dist = 1.15, look = [0, 0, 0.08];
+    const pos = [look[0] + dist * dir[0], look[1] + dist * dir[1], look[2] + dist * dir[2]];
+    const right = norm(cross([0, 0, 1], dir)), up = cross(dir, right);
+    const f = 1.32 * S.zoom * Math.min(W, H * 1.22);
+    cam = { pos, dir, right, up, f, cx: W / 2, cy: H * 0.47 };
+  }
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = v => { const n = Math.hypot(v[0], v[1], v[2]); return [v[0] / n, v[1] / n, v[2] / n]; };
+  const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  function proj(p) {
+    const d = [p[0] - cam.pos[0], p[1] - cam.pos[1], p[2] - cam.pos[2]];
+    const depth = -dot3(d, cam.dir), s = cam.f / depth;
+    return { x: cam.cx + s * dot3(d, cam.right), y: cam.cy - s * dot3(d, cam.up), s, depth };
+  }
+  function line3(pts, col, w, dash) {
+    rc.beginPath();
+    pts.forEach((p, i) => { const q = proj(p); if (i) rc.lineTo(q.x, q.y); else rc.moveTo(q.x, q.y); });
+    rc.strokeStyle = col; rc.lineWidth = w; rc.setLineDash(dash || []); rc.stroke(); rc.setLineDash([]);
+  }
+  const LIGHT = norm([-0.4, -0.6, 1]);
+  function shade(hex, n) {
+    const l = 0.62 + 0.38 * Math.max(0, dot3(n, LIGHT));
+    const c = [1, 3, 5].map(i => Math.round(parseInt(hex.substr(i, 2), 16) * l));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  }
+  // box faces, nearest last; hidden faces skipped
+  function boxFaces(xr, yr, zr) {
+    const v = (i, j, k) => [xr[i], yr[j], zr[k]];
+    return [
+      { p: [v(0, 0, 0), v(0, 1, 0), v(1, 1, 0), v(1, 0, 0)], n: [0, 0, -1] }, { p: [v(0, 0, 1), v(1, 0, 1), v(1, 1, 1), v(0, 1, 1)], n: [0, 0, 1] },
+      { p: [v(0, 0, 0), v(1, 0, 0), v(1, 0, 1), v(0, 0, 1)], n: [0, -1, 0] }, { p: [v(0, 1, 0), v(0, 1, 1), v(1, 1, 1), v(1, 1, 0)], n: [0, 1, 0] },
+      { p: [v(0, 0, 0), v(0, 0, 1), v(0, 1, 1), v(0, 1, 0)], n: [-1, 0, 0] }, { p: [v(1, 0, 0), v(1, 1, 0), v(1, 1, 1), v(1, 0, 1)], n: [1, 0, 0] },
+    ];
+  }
+  function drawFace(p, n, col, edge) {
+    const c = p.reduce((a, q) => [a[0] + q[0] / 4, a[1] + q[1] / 4, a[2] + q[2] / 4], [0, 0, 0]);
+    if (dot3(n, [cam.pos[0] - c[0], cam.pos[1] - c[1], cam.pos[2] - c[2]]) <= 0) return;
+    rc.beginPath();
+    p.forEach((q, i) => { const s = proj(q); if (i) rc.lineTo(s.x, s.y); else rc.moveTo(s.x, s.y); });
+    rc.closePath();
+    rc.fillStyle = shade(col, n); rc.fill();
+    if (edge) { rc.strokeStyle = edge; rc.lineWidth = 0.75; rc.stroke(); }
+  }
+  function drawBox(xr, yr, zr, col, edge, rot) {
+    const fs = boxFaces(xr, yr, zr).map(f => (rot ? { p: f.p.map(rot), n: rot(f.n) } : f));
+    fs.forEach(f => drawFace(f.p, f.n, col, edge));
+  }
+  function plateRot(th) {
+    const c1 = Math.cos(th[0]), s1 = Math.sin(th[0]), c2 = Math.cos(-th[1]), s2 = Math.sin(-th[1]);
+    return p => {          // R = Ry*Rx, as +bop/+viz/rigPose.m
+      const y = c2 * p[1] - s2 * p[2], z = s2 * p[1] + c2 * p[2];
+      return [c1 * p[0] + s1 * z, y, -s1 * p[0] + c1 * z];
+    };
+  }
+  function drawPost(xc, yc, r, z0, z1, col) {
+    const c0 = proj([xc, yc, z0]), c1 = proj([xc, yc, z1]);
+    rc.beginPath(); rc.moveTo(c0.x, c0.y); rc.lineTo(c1.x, c1.y);
+    rc.strokeStyle = col; rc.lineWidth = 2 * r * (c0.s + c1.s) / 2; rc.lineCap = 'round'; rc.stroke(); rc.lineCap = 'butt';
+  }
+
+  function drawBall(c, Q, alpha, tint) {
+    const q = proj(c), R = rb * q.s;
+    rc.save();
+    rc.globalAlpha = alpha;
+    const g = rc.createRadialGradient(q.x - R * 0.35, q.y - R * 0.4, R * 0.08, q.x, q.y, R);
+    const base = tint || '#eb6834';
+    g.addColorStop(0, '#fff'); g.addColorStop(0.18, base); g.addColorStop(1, shade(base, [0, 0, -1]));
+    rc.beginPath(); rc.arc(q.x, q.y, R, 0, 2 * Math.PI); rc.fillStyle = g; rc.fill();
+    if (Q) {
+      rc.clip();
+      const rot = v => [Q[0][0] * v[0] + Q[0][1] * v[1] + Q[0][2] * v[2], Q[1][0] * v[0] + Q[1][1] * v[1] + Q[1][2] * v[2], Q[2][0] * v[0] + Q[2][1] * v[1] + Q[2][2] * v[2]];
+      const sp = v => ({ x: q.x + R * dot3(v, cam.right), y: q.y - R * dot3(v, cam.up), front: dot3(v, cam.dir) > 0 });
+      // white band around the ball and a dark spot: they show the rolling
+      rc.strokeStyle = '#fff'; rc.lineWidth = R * 0.36; rc.lineCap = 'round';
+      rc.beginPath();
+      let on = false;
+      for (let i = 0; i <= 48; i++) {
+        const a = 2 * Math.PI * i / 48, s = sp(rot([0, Math.cos(a), Math.sin(a)]));
+        if (s.front) { if (on) rc.lineTo(s.x, s.y); else rc.moveTo(s.x, s.y); on = true; } else on = false;
+      }
+      rc.stroke(); rc.lineCap = 'butt';
+      const pole = sp(rot([0, 0, 1]));
+      if (pole.front) { rc.beginPath(); rc.arc(pole.x, pole.y, R * 0.3, 0, 2 * Math.PI); rc.fillStyle = COL.ink; rc.fill(); }
+    }
+    rc.restore();
+  }
+
+  function drawRig(F) {
+    const d = fit(rig);
+    W = d.w; H = d.h;
+    rc.setTransform(d.d, 0, 0, d.d, 0, 0);
+    rc.clearRect(0, 0, W, H);
+    setCamera();
+    const thick = 0.006, lever = P0.lever, horn = P0.horn, rodLen = 0.09, hp = P0.half;
+    const hornZ = -thick - rodLen, baseZ = hornZ - 0.045;
+    const R = plateRot(F.th);
+    // base, post and servos, far ones first
+    drawBox([-0.2, 0.2], [-0.2, 0.2], [baseZ - 0.012, baseZ], '#c3c2b7');
+    const hx = lever - horn;
+    const parts = [
+      { c: [hx, 0.016, hornZ], draw: () => { line3([[hx, 0.016, baseZ], [hx, 0.016, hornZ - 0.036]], COL.ink2, 3); drawBox([hx - 0.02, hx + 0.02], [0.006, 0.026], [hornZ - 0.036, hornZ + 0.006], '#52514e'); } },
+      { c: [0.016, hx, hornZ], draw: () => { line3([[0.016, hx, baseZ], [0.016, hx, hornZ - 0.036]], COL.ink2, 3); drawBox([0.006, 0.026], [hx - 0.02, hx + 0.02], [hornZ - 0.036, hornZ + 0.006], '#52514e'); } },
+      { c: [0, 0, hornZ], draw: () => drawPost(0, 0, 0.008, baseZ, -thick - 0.012, '#898781') },
+    ];
+    parts.sort((a, b) => proj(b.c).depth - proj(a.c).depth).forEach(p => p.draw());
+    // horns and push rods
+    for (let a = 0; a < 2; a++) {
+      const axis = a === 0 ? [hx, 0, hornZ] : [0, hx, hornZ];
+      const c = Math.cos(F.phi[a]) * horn, z = hornZ - Math.sin(F.phi[a]) * horn;
+      const tip = a === 0 ? [hx + c, 0, z] : [0, hx + c, z];
+      const att = R(a === 0 ? [lever, 0, -thick] : [0, lever, -thick]);
+      line3([axis, tip], COL.ink, 6 * (proj(axis).s / 600));
+      line3([tip, att], COL.muted, 2.5);
+    }
+    // plate
+    drawBox([-hp, hp], [-hp, hp], [-thick, 0], '#f0efec', '#c3c2b7', R);
+    for (let g = -0.15; g <= 0.1501; g += 0.05) {
+      line3([R([g, -hp, 1e-4]), R([g, hp, 1e-4])], COL.base, 0.75);
+      line3([R([-hp, g, 1e-4]), R([hp, g, 1e-4])], COL.base, 0.75);
+    }
+    // limit, target ring, path
+    const tl = P0.travel;
+    line3([[-tl, -tl], [tl, -tl], [tl, tl], [-tl, tl], [-tl, -tl]].map(p => R([p[0], p[1], 1e-4])), COL.muted, 0.75, [2, 3]);
+    if (F.path && F.path.length > 1) line3(F.path.map(p => R([p[0], p[1], 4e-4])), COL.ink2, 1.25, [5, 4]);
+    const ring = [];
+    const tgt = F.target || [0, 0];
+    for (let i = 0; i <= 40; i++) { const a = 2 * Math.PI * i / 40; ring.push(R([tgt[0] + P0.band * Math.cos(a), tgt[1] + P0.band * Math.sin(a), 6e-4])); }
+    line3(ring, COL.ink, 1.5);
+    if (F.trail && F.trail.length > 1) line3(F.trail.map(p => R([p[0], p[1], 1.5e-3])), F.color || COL.ctrl[1], 1.75);
+    // shadow and drop line of a ball in the air
+    const z = Math.max(F.z || 0, 0);
+    const centre = R([F.pos[0], F.pos[1], rb]);
+    centre[2] += z;
+    if (z > 1e-3) {
+      const q = [];
+      for (let i = 0; i < 28; i++) { const a = 2 * Math.PI * i / 28; q.push(R([F.pos[0] + rb * Math.cos(a), F.pos[1] + rb * Math.sin(a), 3e-4])); }
+      rc.beginPath();
+      q.forEach((p, i) => { const s = proj(p); if (i) rc.lineTo(s.x, s.y); else rc.moveTo(s.x, s.y); });
+      rc.closePath(); rc.fillStyle = 'rgba(0,0,0,.22)'; rc.fill();
+      line3([R([F.pos[0], F.pos[1], 3e-4]), [centre[0], centre[1], centre[2] - rb]], COL.muted, 1, [2, 3]);
+    }
+    // camera, and balls by depth
+    const camZ = 0.30;
+    [[1, 1], [-1, 1], [-1, -1], [1, -1]].forEach(c => line3([[0, 0, camZ], R([hp * c[0], hp * c[1], 0])], 'rgba(137,135,129,.4)', 0.5));
+    const items = [{ c: [0, 0, camZ + 0.015], draw: () => {
+      drawBox([-0.025, 0.025], [-0.018, 0.018], [camZ, camZ + 0.03], '#2b2b2a');
+      const q = proj([0.03, 0, camZ + 0.035]);
+      rc.fillStyle = COL.ink2; rc.font = '12px "Segoe UI", system-ui, sans-serif'; rc.textAlign = 'left';
+      rc.fillText('webcam, 30 fps', q.x + 6, q.y);
+    } }];
+    (F.ghosts || []).forEach(g => {
+      const c = R([g.pos[0], g.pos[1], rb]); c[2] += Math.max(g.z, 0);
+      items.push({ c, draw: () => drawBall(c, null, 0.42, g.color) });
+    });
+    items.push({ c: centre, draw: () => drawBall(centre, F.Q || null, 1) });
+    items.sort((a, b) => proj(b.c).depth - proj(a.c).depth).forEach(i => i.draw());
+  }
+
+  // ---- map -------------------------------------------------------------------------
+  const map = $('map'), mc = map.getContext('2d');
+  const MAP_MARGIN = 64;
+  let mapScale = 1, mapW = 1;
+  const mx = x => mapW / 2 + x * mapScale, my = y => mapW / 2 - y * mapScale;
+  function drawMap(F) {
+    const d = fit(map);
+    mapW = d.w;
+    mapScale = (d.w - MAP_MARGIN) / (2 * half);
+    mc.setTransform(d.d, 0, 0, d.d, 0, 0);
+    mc.clearRect(0, 0, d.w, d.h);
+    mc.font = '11px "Segoe UI", system-ui, sans-serif';
+    mc.fillStyle = COL.band; mc.fillRect(mx(-half), my(half), 2 * half * mapScale, 2 * half * mapScale);
+    mc.strokeStyle = COL.grid; mc.lineWidth = 1;
+    mc.fillStyle = COL.ink2;
+    for (let g = -100; g <= 100; g += 50) {
+      mc.beginPath(); mc.moveTo(mx(g), my(-half)); mc.lineTo(mx(g), my(half)); mc.moveTo(mx(-half), my(g)); mc.lineTo(mx(half), my(g)); mc.stroke();
+      mc.textAlign = 'center'; mc.fillText(String(g), mx(g), my(-half) + 13);
+      mc.textAlign = 'right'; mc.fillText(String(g), mx(-half) - 3, my(g) + 4);
+    }
+    mc.strokeStyle = COL.ink2; mc.lineWidth = 1.25; mc.strokeRect(mx(-half), my(half), 2 * half * mapScale, 2 * half * mapScale);
+    mc.setLineDash([2, 3]); mc.strokeStyle = COL.muted; mc.lineWidth = 1; mc.strokeRect(mx(-travel), my(travel), 2 * travel * mapScale, 2 * travel * mapScale); mc.setLineDash([]);
+    mc.fillStyle = COL.ink2; mc.textAlign = 'center'; mc.fillText('top view [mm]: x right, y up', d.w / 2, 11);
+    const { pts, loop } = currentPath();
+    if (C.task !== 'centre') {
+      const q = closed(pts, loop);
+      mc.strokeStyle = COL.x; mc.lineWidth = 1.5; mc.beginPath();
+      q.forEach((p, i) => { if (i) mc.lineTo(mx(1000 * p[0]), my(1000 * p[1])); else mc.moveTo(mx(1000 * p[0]), my(1000 * p[1])); });
+      mc.stroke();
+      mc.fillStyle = COL.x;
+      if (q.length <= 12) q.forEach(p => { mc.beginPath(); mc.arc(mx(1000 * p[0]), my(1000 * p[1]), 3, 0, 7); mc.fill(); });
+    }
+    if (F && F.trail && F.trail.length > 1) {
+      mc.strokeStyle = COL.ink2; mc.lineWidth = 1; mc.beginPath();
+      F.trail.forEach((p, i) => { if (i) mc.lineTo(mx(1000 * p[0]), my(1000 * p[1])); else mc.moveTo(mx(1000 * p[0]), my(1000 * p[1])); });
+      mc.stroke();
+    }
+    const tgt = F && F.target ? F.target : pts[0];
+    mc.strokeStyle = COL.ink; mc.lineWidth = 1.25; mc.beginPath(); mc.arc(mx(1000 * tgt[0]), my(1000 * tgt[1]), Math.max(1000 * P0.band * mapScale, 3), 0, 7); mc.stroke();
+    if (C.speed > 0) {
+      const L = 0.15 * C.speed;
+      mc.strokeStyle = COL.y; mc.lineWidth = 2; mc.beginPath(); mc.moveTo(mx(C.x), my(C.y));
+      mc.lineTo(mx(C.x + L * Math.cos(C.dir / DEG)), my(C.y + L * Math.sin(C.dir / DEG))); mc.stroke();
+    }
+    mc.strokeStyle = COL.y; mc.lineWidth = 2.5; mc.beginPath();
+    mc.moveTo(mx(C.x) - 5, my(C.y) - 5); mc.lineTo(mx(C.x) + 5, my(C.y) + 5);
+    mc.moveTo(mx(C.x) + 5, my(C.y) - 5); mc.lineTo(mx(C.x) - 5, my(C.y) + 5); mc.stroke();
+    if (F && F.pos && S.D.length) {
+      mc.fillStyle = COL.y; mc.beginPath(); mc.arc(mx(1000 * F.pos[0]), my(1000 * F.pos[1]), 1000 * rb * mapScale, 0, 7);
+      mc.globalAlpha = 0.85; mc.fill(); mc.globalAlpha = 1;
+    }
+  }
+
+  function mapClick(xmm, ymm) {
+    const x = clamp(xmm, -travel, travel), y = clamp(ymm, -travel, travel);
+    if (S.drawing) {
+      if (C.custom.length >= 64) { say('A path can have at most 64 points.'); return; }
+      C.custom.push([x, y]);
+    } else {
+      C.x = Math.round(x); C.y = Math.round(y);
+    }
+    changed();
+  }
+
+  // ---- preview before a run -----------------------------------------------------------
+  function preview() {
+    const { pts, loop } = currentPath();
+    S.path = C.task === 'centre' ? null : closed(pts, loop);
+    const F = { th: [0, 0], phi: [0, 0], pos: [C.x / 1000, C.y / 1000], z: C.h / 1000, target: pts[0], path: S.path };
+    drawRig(F);
+    drawMap(null);
+    const how = C.h > 0 ? `dropped from ${Math.round(C.h)} mm` : 'placed on the plate';
+    $('readout').innerHTML = `<b>Start (${Math.round(C.x)}, ${Math.round(C.y)}) mm</b>, ${how}. Press Simulate.`;
+    $('lost').style.display = 'none';
+    setPlayback(false);
+    drawCharts();
+    say('');
+  }
+
+  function setPlayback(on) {
+    ['playBtn', 'slider', 'pb', 'run'].forEach(i => { $(i).disabled = !on; });
+    $('playBtn').textContent = 'Play';
+    if (!on) { $('timeLbl').textContent = '0.00 s'; $('slider').value = 0; }
+  }
+
+  // ---- simulate ---------------------------------------------------------------------------
+  function scenario(pts, loop) {
+    const PB = C.ball === 'hollow' ? G.hollow : G.solid;
+    const h = C.h / 1000, tFall = Math.sqrt(2 * h / PB.sl.ballPar[1]), e = PB.restitution;
+    const tBounce = tFall * (1 + e) / (1 - e);
+    let ref, T;
+    if (C.task !== 'centre') {
+      ref = BOP.makeRef(pts, C.pathSpeed / 1000, loop);
+      const q = closed(pts, loop);
+      let L = 0;
+      for (let i = 1; i < q.length; i++) L += Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]);
+      T = tBounce + 2 + L / (C.pathSpeed / 1000) + 3;
+    } else {
+      ref = BOP.makeRef([[0, 0]]);
+      T = tBounce + 6;
+    }
+    const v = [C.speed / 1000 * Math.cos(C.dir / DEG), C.speed / 1000 * Math.sin(C.dir / DEG)];
+    return { ball: C.ball, pos0: [C.x / 1000, C.y / 1000], vel0: v, h0: h, noSpin: h > 0, ref, Tend: Math.min(T, 40), noisy: true, seed: 501 };
+  }
+
+  function frames(o, ctrl) {
+    // resample to video frames, ball orientation by rolling without slipping
+    const step = Math.round(1 / (FPS * o.dt)), idx = [];
+    for (let k = 0; k < o.t.length; k += step) idx.push(k);
+    if (idx[idx.length - 1] !== o.t.length - 1) idx.push(o.t.length - 1);
+    const d = { name: NAMES[ctrl], ctrl, color: COL.ctrl[ctrl], m: o.m, o, idx, t: idx.map(k => o.t[k]), Q: [], ref: [] };
+    let Q = [[1, 0, 0], [0, 1, 0], [0, 0, 1]], c = 0;
+    let prev = o.pos[0];
+    idx.forEach((k, i) => {
+      const p = o.pos[k], dx = p[0] - prev[0], dy = p[1] - prev[1], n = Math.hypot(dx, dy);
+      if (n > 0 && o.z[k] < 1e-4 && i > 0) {
+        const ang = n / rb, u = [-dy / n, dx / n, 0];
+        const K = [[0, -u[2], u[1]], [u[2], 0, -u[0]], [-u[1], u[0], 0]];
+        const s = Math.sin(ang), v = 1 - Math.cos(ang);
+        const M = [0, 1, 2].map(a => [0, 1, 2].map(b => {
+          let w = (a === b ? 1 : 0) + s * K[a][b];
+          for (let j = 0; j < 3; j++) w += v * K[a][j] * K[j][b];
+          return w;
+        }));
+        Q = M.map(r => [0, 1, 2].map(b => r[0] * Q[0][b] + r[1] * Q[1][b] + r[2] * Q[2][b]));
+      }
+      prev = p;
+      d.Q.push(Q);
+      while (c + 1 < o.tc.length && o.tc[c + 1] <= o.t[k] + 1e-12) c++;
+      d.ref.push(o.ref[c]);
+    });
+    return d;
+  }
+
+  function summary(d) {
+    const m = d.m, parts = [];
+    if (C.h > 0) parts.push(`lands ${m.tLand.toFixed(2)} s, ${m.nBounce} bounces (max ${m.maxBounce.toFixed(0)} mm)`);
+    if (m.offPlate) parts.push(`BALL LOST at ${d.t[d.t.length - 1].toFixed(2)} s`);
+    else if (C.task !== 'centre') {
+      parts.push(Number.isNaN(m.trackRMS) ? 'never reached the path start' : `tracking RMS ${m.trackRMS.toFixed(1)} mm, max ${m.trackMax.toFixed(1)} mm`);
+    } else if (Number.isFinite(m.ts)) parts.push(`settled at ${m.ts.toFixed(2)} s`);
+    else parts.push(`not settled (${m.rEnd.toFixed(1)} mm off at the end)`);
+    return parts.join(', ');
+  }
+
+  function addLog(d) {
+    let how = `start (${Math.round(C.x)},${Math.round(C.y)}) h=${Math.round(C.h)}`;
+    if (C.speed > 0) how += ` v=${Math.round(C.speed)} dir=${Math.round(C.dir)}`;
+    const task = C.task === 'centre' ? 'centre' : `${C.task} ${Math.round(C.pathSpeed)} mm/s`;
+    S.log.unshift({ head: `${d.name} ${how} ${C.ball}, ${task}`, res: summary(d), lost: d.m.offPlate });
+    renderLog();
+  }
+  function renderLog() {
+    const log = $('log');
+    log.textContent = '';
+    if (!S.log.length) { const e = document.createElement('div'); e.className = 'e'; e.textContent = 'No runs yet.'; log.appendChild(e); }
+    for (const l of S.log) {
+      const e = document.createElement('div'); e.className = 'e';
+      e.append(l.head);
+      const s = document.createElement('span');
+      if (l.lost) { const p = document.createElement('b'); p.className = 'pill'; p.textContent = '!'; s.appendChild(p); }
+      s.append(l.res);
+      e.appendChild(s);
+      log.appendChild(e);
+    }
+  }
+
+  function simulate(autoPlay) {
+    S.playing = false;
+    if (C.task === 'custom' && C.custom.length < 2) { say('Draw a path first: press Draw path and click at least 2 points.'); return false; }
+    if (S.drawing) { S.drawing = false; sync(); }
+    const { pts, loop } = currentPath();
+    const scen = scenario(pts, loop);
+    const which = C.compare ? [0, 1, 2] : [C.ctrl];
+    const t0 = performance.now();
+    S.D = which.map(c => frames(BOP.simulate(G, scen, c, cache), c));
+    S.scen = scen;
+    S.results = S.D.map(d => ({ name: d.name, m: d.m, end: d.t[d.t.length - 1] }));
+    for (let k = S.D.length - 1; k >= 0; k--) addLog(S.D[k]);
+    S.run = 0; S.f = 0;
+    const r = $('run'); r.textContent = '';
+    S.D.forEach((d, i) => { const o = document.createElement('option'); o.value = i; o.textContent = d.name; r.appendChild(o); });
+    setPlayback(true);
+    setSlider();
+    S.path = C.task === 'centre' ? null : closed(pts, loop);
+    drawCharts();
+    update();
+    say(`${S.D[0].name}: ${summary(S.D[0])}. Simulated ${scen.Tend.toFixed(1)} s in ${Math.round(performance.now() - t0)} ms.`);
+    if (autoPlay && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) play();
+    return true;
+  }
+
+  // ---- playback ------------------------------------------------------------------------------
+  function setSlider() {
+    const s = $('slider');
+    s.min = 0; s.max = Math.max(S.D[S.run].t.length - 1, 1); s.value = S.f;
+  }
+  function frameOf(run, f) {
+    const d = S.D[run], k = Math.min(f, d.t.length - 1), o = d.o;
+    const trail = [];
+    for (let i = 0; i <= k; i++) trail.push(o.pos[d.idx[i]]);
+    const i = d.idx[k];
+    const F = { th: o.th[i], phi: o.phi[i], pos: o.pos[i], z: o.z[i], Q: d.Q[k], trail, color: d.color, target: d.ref[k], path: S.path, ghosts: [] };
+    S.D.forEach((g, r) => {
+      if (r !== run) { const j = g.idx[Math.min(f, g.idx.length - 1)]; F.ghosts.push({ pos: g.o.pos[j], z: g.o.z[j], color: g.color }); }
+    });
+    return F;
+  }
+  function update() {
+    if (!S.D.length) return;
+    const d = S.D[S.run], k = Math.min(S.f, d.t.length - 1), F = frameOf(S.run, k);
+    drawRig(F);
+    drawMap(F);
+    const err = 1000 * Math.hypot(F.pos[0] - F.target[0], F.pos[1] - F.target[1]);
+    const where = F.z > 1e-3 ? `in the air, ${(1000 * F.z).toFixed(0)} mm above the plate` : `${err.toFixed(1)} mm from the target`;
+    $('readout').innerHTML = `<b>${d.name}</b> &nbsp; t = ${d.t[k].toFixed(2)} s &nbsp; ${where}<br>plate tilt (${(F.th[0] * DEG).toFixed(1)}, ${(F.th[1] * DEG).toFixed(1)}) deg`;
+    $('slider').value = k;
+    $('timeLbl').textContent = `${d.t[k].toFixed(2)} s`;
+    const lost = d.m.offPlate && k >= d.t.length - 1;
+    const b = $('lost');
+    b.style.display = lost ? 'block' : 'none';
+    if (lost) b.innerHTML = `<b>! BALL LOST at ${d.t[k].toFixed(2)} s</b>It left the plate, so this run ended here.`;
+    drawCursor();
+  }
+  let last = 0;
+  function tick(now) {
+    if (!S.playing) return;
+    const d = S.D[S.run];
+    S.time += Math.max(now - last, 0) / 1000 * S.pb;   // the first frame's stamp can precede the Play press
+    last = now;
+    let k = Math.floor(S.time * FPS);
+    if (k >= d.t.length - 1) { k = d.t.length - 1; S.playing = false; $('playBtn').textContent = 'Play'; }
+    S.f = k;
+    update();
+    if (S.playing) requestAnimationFrame(tick);
+  }
+  function play() {
+    if (!S.D.length) return;
+    const n = S.D[S.run].t.length;
+    if (S.f >= n - 1) S.f = 0;
+    S.time = S.f / FPS;
+    S.playing = true;
+    $('playBtn').textContent = 'Pause';
+    last = performance.now();
+    requestAnimationFrame(tick);
+  }
+
+  // ---- charts: one x axis, one y axis each, synced crosshair, table below -----------------------
+  const CH = [
+    { id: 'dist', title: 'Distance to the target [mm, log scale]', log: true, series: o => [{ name: 'distance', col: COL.x, y: distSeries(o) }], band: true },
+    { id: 'xy', title: 'Ball position [mm]', series: o => [
+      { name: 'x', col: COL.x, y: o.pos.map(p => 1000 * p[0]) }, { name: 'y', col: COL.y, y: o.pos.map(p => 1000 * p[1]) }] },
+    { id: 'tilt', title: 'Plate tilt [deg]: actual (solid), command (dashed)', series: o => {
+      const hold = a => holdOn(o, a);
+      return [
+        { name: 'x actual', col: COL.x, y: o.th.map(t => t[0] * DEG) }, { name: 'x command', col: COL.x, dash: [5, 3], y: hold(0) },
+        { name: 'y actual', col: COL.y, y: o.th.map(t => t[1] * DEG) }, { name: 'y command', col: COL.y, dash: [5, 3], y: hold(1) }];
+    } },
+    { id: 'z', title: 'Ball height above the plate [mm]', series: o => [{ name: 'height', col: COL.x, y: o.z.map(z => 1000 * Math.max(z, 0)) }] },
+  ];
+  function holdOn(o, a) {
+    let c = 0;
+    return o.t.map(t => { while (c + 1 < o.tc.length && o.tc[c + 1] <= t + 1e-12) c++; return o.cmd[c][a] * DEG; });
+  }
+  function distSeries(o) {
+    let c = 0;
+    return o.t.map((t, k) => {
+      while (c + 1 < o.tc.length && o.tc[c + 1] <= t + 1e-12) c++;
+      return 1000 * Math.hypot(o.pos[k][0] - o.ref[c][0], o.pos[k][1] - o.ref[c][1]);
+    });
+  }
+  const charts = {};
+  function buildCharts() {
+    const host = $('charts');
+    CH.forEach(c => {
+      const w = document.createElement('div'); w.className = 'chart';
+      const h = document.createElement('h3'); h.textContent = c.title; w.appendChild(h);
+      const lg = document.createElement('div'); lg.className = 'lg'; w.appendChild(lg);
+      const cv = document.createElement('canvas'); cv.id = 'chart-' + c.id; cv.setAttribute('aria-label', c.title); w.appendChild(cv);
+      host.appendChild(w);
+      charts[c.id] = { c, cv, lg, data: null };
+      cv.addEventListener('mousemove', e => hover(e, charts[c.id]));
+      cv.addEventListener('mouseleave', () => { $('tip').style.display = 'none'; S.hoverT = null; drawCursor(); });
+      cv.addEventListener('click', e => {
+        const q = xToT(e, charts[c.id]);
+        if (q !== null && S.D.length) { S.playing = false; S.f = Math.round(q * FPS); update(); }
+      });
+    });
+  }
+  const PAD = { l: 44, r: 10, t: 6, b: 22 };
+  function drawCharts() {
+    const has = S.D.length > 0, d = has ? S.D[S.run] : null;
+    for (const key of Object.keys(charts)) {
+      const ch = charts[key];
+      ch.data = has ? ch.c.series(d.o) : null;
+      ch.lg.textContent = '';
+      if (has && ch.data.length > 1) {
+        ch.data.forEach(s => {
+          const e = document.createElement('span'), i = document.createElement('i');
+          i.style.borderTopColor = s.col; if (s.dash) i.style.borderTopStyle = 'dashed';
+          e.appendChild(i); e.append(s.name); ch.lg.appendChild(e);
+        });
+      }
+      drawChart(ch);
+    }
+    fillTable();
+  }
+  const niceStep = span => { const p = Math.pow(10, Math.floor(Math.log10(span))), q = span / p; return (q < 2 ? 0.2 : q < 5 ? 0.5 : 1) * p * 2; };
+  function drawChart(ch) {
+    const d = fit(ch.cv), g = ch.cv.getContext('2d');
+    g.setTransform(d.d, 0, 0, d.d, 0, 0);
+    g.clearRect(0, 0, d.w, d.h);
+    g.font = '11px "Segoe UI", system-ui, sans-serif';
+    const iw = d.w - PAD.l - PAD.r, ih = d.h - PAD.t - PAD.b;
+    if (!ch.data) {
+      g.fillStyle = COL.muted; g.textAlign = 'center'; g.fillText('Press Simulate to see this plot', d.w / 2, d.h / 2);
+      ch.sx = null;
+      return;
+    }
+    const t = S.D[S.run].o.t, T = t[t.length - 1] || 1;
+    let lo = Infinity, hi = -Infinity;
+    ch.data.forEach(s => s.y.forEach(v => { lo = Math.min(lo, v); hi = Math.max(hi, v); }));
+    let ticks, sy;
+    if (ch.c.log) {
+      lo = 0.3; hi = Math.max(hi, 10) * 1.2;
+      ticks = [1, 5, 10, 50, 100, 200].filter(v => v <= hi);
+      sy = v => PAD.t + ih * (1 - (Math.log10(Math.max(v, lo)) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)));
+    } else {
+      if (hi - lo < 1e-6) { hi += 1; lo -= 1; }
+      if (ch.c.id === 'z') lo = 0;
+      const st = niceStep(hi - lo);
+      ticks = [];
+      for (let v = Math.ceil(lo / st) * st; v <= hi + 1e-9; v += st) ticks.push(Math.abs(v) < 1e-9 ? 0 : v);
+      const m = (hi - lo) * 0.05; const l0 = ch.c.id === 'z' ? 0 : lo - m, h0 = hi + m;
+      sy = v => PAD.t + ih * (1 - (v - l0) / (h0 - l0));
+    }
+    const sx = v => PAD.l + iw * v / T;
+    ch.sx = sx; ch.iw = iw; ch.T = T; ch.h = d.h; ch.sy = sy;
+    g.strokeStyle = COL.grid; g.lineWidth = 1; g.fillStyle = COL.ink2; g.textAlign = 'right';
+    ticks.forEach(v => { const y = sy(v); g.beginPath(); g.moveTo(PAD.l, y); g.lineTo(d.w - PAD.r, y); g.stroke(); g.fillText(String(+v.toFixed(2)), PAD.l - 5, y + 4); });
+    const xs = niceStep(T);
+    g.textAlign = 'center';
+    for (let v = 0; v <= T + 1e-9; v += xs) { g.fillText(`${+v.toFixed(1)} s`, sx(v), d.h - 6); }
+    if (ch.c.band) {
+      g.strokeStyle = COL.ink2; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(PAD.l, sy(5)); g.lineTo(d.w - PAD.r, sy(5)); g.stroke(); g.setLineDash([]);
+      g.fillStyle = COL.ink2; g.textAlign = 'right'; g.fillText('5 mm: settled band', d.w - PAD.r, sy(5) - 4);
+    }
+    const every = Math.max(1, Math.floor(t.length / (iw * 1.5)));
+    ch.data.forEach(s => {
+      g.strokeStyle = s.col; g.lineWidth = 2; g.setLineDash(s.dash || []); g.lineJoin = 'round';
+      g.beginPath();
+      for (let k = 0; k < t.length; k += every) { const x = sx(t[k]), y = sy(s.y[k]); if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+      g.stroke(); g.setLineDash([]);
+    });
+    ch.image = g.getImageData(0, 0, ch.cv.width, ch.cv.height);
+    drawOneCursor(ch);
+  }
+  function drawOneCursor(ch) {
+    if (!ch.sx || !ch.image) return;
+    const g = ch.cv.getContext('2d'), d = window.devicePixelRatio || 1;
+    if (ch.image.width !== ch.cv.width || ch.image.height !== ch.cv.height) return;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.putImageData(ch.image, 0, 0);
+    g.setTransform(d, 0, 0, d, 0, 0);
+    const dd = S.D[S.run], k = Math.min(S.f, dd.t.length - 1);
+    const line = (t, col, w) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.moveTo(ch.sx(t), PAD.t); g.lineTo(ch.sx(t), ch.h - PAD.b); g.stroke(); };
+    line(dd.t[k], COL.ink, 1);
+    if (S.hoverT !== null && S.hoverT !== undefined) line(S.hoverT, COL.muted, 1);
+  }
+  function drawCursor() { Object.values(charts).forEach(drawOneCursor); }
+  function xToT(e, ch) {
+    if (!ch.sx) return null;
+    const r = ch.cv.getBoundingClientRect();
+    return clamp((e.clientX - r.left - PAD.l) / ch.iw, 0, 1) * ch.T;
+  }
+  function hover(e, ch) {
+    const q = xToT(e, ch), tip = $('tip');
+    if (q === null) return;
+    S.hoverT = q;
+    drawCursor();
+    const o = S.D[S.run].o, k = Math.min(Math.round(q / o.dt), o.t.length - 1);
+    tip.textContent = `t = ${o.t[k].toFixed(2)} s\n` + ch.data.map(s => `${s.name}: ${s.y[k].toFixed(ch.c.id === 'tilt' ? 2 : 1)}`).join('\n');
+    tip.style.display = 'block';
+    tip.style.left = Math.min(e.clientX + 12, window.innerWidth - 150) + 'px';
+    tip.style.top = (e.clientY + 12) + 'px';
+  }
+  function fillTable() {
+    const tb = $('table');
+    tb.textContent = '';
+    if (!S.D.length) return;
+    const o = S.D[S.run].o, dist = distSeries(o), hx = holdOn(o, 0), hy = holdOn(o, 1);
+    const head = ['t [s]', 'distance [mm]', 'x [mm]', 'y [mm]', 'height [mm]', 'tilt x [deg]', 'tilt y [deg]', 'command x [deg]', 'command y [deg]'];
+    const tr = document.createElement('tr');
+    head.forEach(h => { const th = document.createElement('th'); th.textContent = h; tr.appendChild(th); });
+    tb.appendChild(tr);
+    const step = Math.round(0.25 / o.dt);
+    for (let k = 0; k < o.t.length; k += step) {
+      const row = document.createElement('tr');
+      [o.t[k].toFixed(2), dist[k].toFixed(1), (1000 * o.pos[k][0]).toFixed(1), (1000 * o.pos[k][1]).toFixed(1), (1000 * Math.max(o.z[k], 0)).toFixed(1),
+        (o.th[k][0] * DEG).toFixed(2), (o.th[k][1] * DEG).toFixed(2), hx[k].toFixed(2), hy[k].toFixed(2)].forEach(v => {
+        const td = document.createElement('td'); td.textContent = v; row.appendChild(td);
+      });
+      tb.appendChild(row);
+    }
+  }
+
+  // ---- events --------------------------------------------------------------------------------
+  for (const k of Object.keys(LIM)) {
+    $(k).addEventListener('change', e => {
+      const v = parseFloat(e.target.value);
+      if (Number.isFinite(v)) {
+        C[k] = clamp(v, LIM[k][0], LIM[k][1]);
+        changed();
+        if (v !== C[k]) say(`${e.target.parentElement.textContent.trim()}: kept inside its range, ${LIM[k][0].toFixed(0)} to ${LIM[k][1].toFixed(0)}.`);
+      } else { sync(); say('That is not a number, so the old value stays.'); }
+    });
+  }
+  $('ball').addEventListener('change', e => { C.ball = e.target.value; changed(); });
+  $('task').addEventListener('change', e => { C.task = e.target.value; changed(); });
+  $('ctrl').addEventListener('change', e => { C.ctrl = +e.target.value; changed(); });
+  $('compare').addEventListener('change', e => { C.compare = e.target.checked; changed(); });
+  $('draw').addEventListener('click', () => {
+    S.drawing = !S.drawing;
+    if (S.drawing) C.task = 'custom';
+    changed();
+    if (S.drawing) say('Click the map to add path points, then press Done.');
+    else say(C.custom.length < 2 ? 'A path needs at least 2 points.' : `Path with ${C.custom.length} points. Press Simulate.`);
+  });
+  $('clear').addEventListener('click', () => { C.custom = []; changed(); });
+  $('sim').addEventListener('click', () => simulate(true));
+  $('logClear').addEventListener('click', () => { S.log = []; renderLog(); });
+  $('playBtn').addEventListener('click', () => {
+    if (S.playing) { S.playing = false; $('playBtn').textContent = 'Play'; } else play();
+  });
+  $('slider').addEventListener('input', e => { S.playing = false; $('playBtn').textContent = 'Play'; S.f = +e.target.value; update(); });
+  $('pb').addEventListener('change', e => { S.pb = +e.target.value; });
+  $('run').addEventListener('change', e => { S.run = +e.target.value; S.f = Math.min(S.f, S.D[S.run].t.length - 1); setSlider(); drawCharts(); update(); });
+  map.addEventListener('click', e => {
+    const r = map.getBoundingClientRect();
+    mapClick((e.clientX - r.left - mapW / 2) / mapScale, (mapW / 2 - (e.clientY - r.top)) / mapScale);
+  });
+  let drag = null;
+  rig.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; rig.setPointerCapture(e.pointerId); });
+  rig.addEventListener('pointerup', () => { drag = null; });
+  rig.addEventListener('pointermove', e => {
+    if (!drag) return;
+    S.az -= (e.clientX - drag[0]) * 0.4;
+    S.el = clamp(S.el + (e.clientY - drag[1]) * 0.3, 6, 85);
+    drag = [e.clientX, e.clientY];
+    redraw();
+  });
+  rig.addEventListener('wheel', e => { e.preventDefault(); S.zoom = clamp(S.zoom * Math.exp(-e.deltaY * 0.001), 0.5, 2.5); redraw(); }, { passive: false });
+  function redraw() {
+    if (S.D.length) update();
+    else { const keep = $('status').textContent; preview(); say(keep); }
+  }
+  window.addEventListener('resize', () => { redraw(); drawCharts(); });
+
+  // ---- open in a working state: the default drop, already simulated -----------------------------
+  buildCharts();
+  sync();
+  renderLog();
+  preview();
+  simulate(false);
+  window.BOPUI = { C, S, simulate, mapClick, changed, update, play };
+})();
+
+</script>
+</body>
+</html>
